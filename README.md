@@ -24,7 +24,7 @@
 ### Вариант 1 — Docker Compose (рекомендуется)
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/NaXy9/cash-flow-manager
 cd cash_flow_manager
 
 docker compose up --build
