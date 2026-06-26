@@ -1,0 +1,971 @@
+{% extends "base.html" %}
+{% load cash_filters %}
+
+{% block title %}ДДС — Движение денежных средств{% endblock %}
+
+{% block body %}
+<div class="min-vh-100">
+{#  NAVBAR  #}
+<nav class="navbar navbar-expand sticky-top" style="background:#fff;border-bottom:1px solid #e5e7eb;">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand fw-bold d-flex align-items-center gap-2 me-3">
+      <i class="bi bi-bank2 text-primary"></i> ДДС
+    </span>
+    <span class="text-muted small me-auto">Движение денежных средств</span>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm"
+              data-bs-toggle="modal" data-bs-target="#dirModal">
+        <i class="bi bi-folder2 me-1"></i>Справочники
+      </button>
+      <button class="btn btn-primary btn-sm"
+              onclick="openCreate()" data-bs-toggle="modal" data-bs-target="#formModal">
+        <i class="bi bi-plus-lg me-1"></i>Добавить запись
+      </button>
+    </div>
+  </div>
+</nav>
+
+{#  MAIN CONTENT  #}
+<div class="container-fluid px-4 py-4">
+
+  {#  STAT CARDS  #}
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="stat-card income">
+        <div class="stat-value">{{ income_total|rubles }}</div>
+        <div class="stat-label"><i class="bi bi-arrow-down-left me-1"></i>Поступления</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="stat-card expense">
+        <div class="stat-value">{{ expense_total|rubles }}</div>
+        <div class="stat-label"><i class="bi bi-arrow-up-right me-1"></i>Расходы</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="stat-card balance">
+        <div class="stat-value">{{ balance|rubles_signed }}</div>
+        <div class="stat-label"><i class="bi bi-calculator me-1"></i>Баланс периода</div>
+      </div>
+    </div>
+  </div>
+
+  {#  FILTER BAR  #}
+  <div class="filter-bar mb-3">
+    <form method="get" id="filter-form">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label small text-muted mb-1">Дата с</label>
+          <input type="date" name="date_from" class="form-control form-control-sm"
+                 value="{{ request.GET.date_from }}">
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label small text-muted mb-1">Дата по</label>
+          <input type="date" name="date_to" class="form-control form-control-sm"
+                 value="{{ request.GET.date_to }}">
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label small text-muted mb-1">Тип</label>
+          <select name="transaction_type" class="form-select form-select-sm">
+            <option value="">Все типы</option>
+            {% for t in all_types %}
+              <option value="{{ t.pk }}"
+                {% if request.GET.transaction_type == t.pk|stringformat:"s" %}selected{% endif %}>
+                {{ t.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label small text-muted mb-1">Статус</label>
+          <select name="status" class="form-select form-select-sm">
+            <option value="">Все статусы</option>
+            {% for s in all_statuses %}
+              <option value="{{ s.pk }}"
+                {% if request.GET.status == s.pk|stringformat:"s" %}selected{% endif %}>
+                {{ s.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label small text-muted mb-1">Категория</label>
+          <select name="category" class="form-select form-select-sm">
+            <option value="">Все категории</option>
+            {% for c in all_categories %}
+              <option value="{{ c.pk }}"
+                {% if request.GET.category == c.pk|stringformat:"s" %}selected{% endif %}>
+                {{ c.name }} ({{ c.transaction_type.name }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-auto ms-lg-auto">
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm px-3">
+              <i class="bi bi-funnel me-1"></i>Применить
+            </button>
+            <a href="{% url 'transactions:list' %}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-x-lg"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {#  TRANSACTION TABLE  #}
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Тип</th>
+            <th>Категория / Подкатегория</th>
+            <th class="text-end">Сумма</th>
+            <th>Статус</th>
+            <th>Комментарий</th>
+            <th class="text-center" style="width:88px">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            {# Дата #}
+            <td class="text-nowrap">{{ t.date|date:"d.m.Y" }}</td>
+
+            {# Тип — цветной badge по полю kind #}
+            <td>
+              {% if t.transaction_type.kind == "income" %}
+                <span class="badge rounded-pill px-2 py-1"
+                      style="background:#d1fae5;color:#065f46">
+                  <i class="bi bi-arrow-down-left me-1"></i>{{ t.transaction_type.name }}
+                </span>
+              {% elif t.transaction_type.kind == "expense" %}
+                <span class="badge rounded-pill px-2 py-1"
+                      style="background:#fee2e2;color:#991b1b">
+                  <i class="bi bi-arrow-up-right me-1"></i>{{ t.transaction_type.name }}
+                </span>
+              {% else %}
+                <span class="badge rounded-pill px-2 py-1"
+                      style="background:#ede9fe;color:#5b21b6">
+                  <i class="bi bi-arrow-left-right me-1"></i>{{ t.transaction_type.name }}
+                </span>
+              {% endif %}
+            </td>
+
+            {# Категория / Подкатегория #}
+            <td>
+              <div class="fw-medium" style="font-size:.9rem">{{ t.category.name }}</div>
+              <div class="text-muted" style="font-size:.8rem">{{ t.subcategory.name }}</div>
+            </td>
+
+            {# Сумма — цвет зависит от kind #}
+            {% if t.transaction_type.kind == "income" %}
+              <td class="text-end fw-semibold text-nowrap" style="color:#059669">
+                +{{ t.amount|rubles }}
+              </td>
+            {% else %}
+              <td class="text-end fw-semibold text-nowrap" style="color:#dc2626">
+                −{{ t.amount|rubles }}
+              </td>
+            {% endif %}
+
+            {# Статус #}
+            <td>
+              <span class="badge rounded-pill px-2 py-1"
+                    style="background:#dbeafe;color:#1e40af;font-size:.75rem">
+                {{ t.status.name }}
+              </span>
+            </td>
+
+            {# Комментарий #}
+            <td class="text-muted text-truncate-cell"
+                style="font-size:.875rem;max-width:200px">
+              <span class="text-truncate d-block" title="{{ t.comment }}">
+                {{ t.comment|default:"—" }}
+              </span>
+            </td>
+
+            {# Действия #}
+            <td class="text-center">
+              <div class="d-flex gap-1 justify-content-center">
+                <button class="btn btn-sm btn-outline-secondary"
+                        title="Редактировать"
+                        onclick="openEdit({{ t.pk }})"
+                        data-bs-toggle="modal" data-bs-target="#formModal">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        title="Удалить"
+                        onclick="deleteTransaction({{ t.pk }}, '{{ t.date|date:'d.m.Y' }}')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="text-center py-5 text-muted">
+              <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+              Записей не найдено.
+              {% if request.GET %}
+                <a href="{% url 'transactions:list' %}" class="d-block mt-1">Сбросить фильтры</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {#  Pagination + row count  #}
+    <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top"
+         style="font-size:.875rem">
+      <span class="text-muted">
+        Показано {{ page_obj.start_index }}–{{ page_obj.end_index }}
+        из {{ total_count }} записей
+      </span>
+      {% if page_obj.paginator.num_pages > 1 %}
+      <nav>
+        <ul class="pagination pagination-sm mb-0 gap-1">
+          {# Prev #}
+          <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+            {% if page_obj.has_previous %}
+              <a class="page-link rounded"
+                 href="?{% query_transform request page=page_obj.previous_page_number %}">‹</a>
+            {% else %}
+              <span class="page-link rounded">‹</span>
+            {% endif %}
+          </li>
+
+          {# Pages (show at most 7; collapse far pages with ellipsis) #}
+          {% for p in page_obj.paginator.page_range %}
+            {% if p == page_obj.number %}
+              <li class="page-item active">
+                <span class="page-link rounded active-page">{{ p }}</span>
+              </li>
+            {% elif p == 1 or p == page_obj.paginator.num_pages or p >= page_obj.number|add:"-2" and p <= page_obj.number|add:"2" %}
+              <li class="page-item">
+                <a class="page-link rounded"
+                   href="?{% query_transform request page=p %}">{{ p }}</a>
+              </li>
+            {% elif p == page_obj.number|add:"-3" or p == page_obj.number|add:"3" %}
+              <li class="page-item disabled"><span class="page-link rounded">…</span></li>
+            {% endif %}
+          {% endfor %}
+
+          {# Next #}
+          <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+            {% if page_obj.has_next %}
+              <a class="page-link rounded"
+                 href="?{% query_transform request page=page_obj.next_page_number %}">›</a>
+            {% else %}
+              <span class="page-link rounded">›</span>
+            {% endif %}
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>{# /card #}
+
+</div>{# /container #}
+
+{#  MODAL 1 — ФОРМА СОЗДАНИЯ / РЕДАКТИРОВАНИЯ  #}
+<div class="modal fade" id="formModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content rounded-3">
+
+      <div class="modal-header px-4 py-3">
+        <div>
+          <h5 class="modal-title fw-bold mb-0" id="formModalTitle">Новая запись</h5>
+          <p class="text-muted small mb-0 mt-1" id="formModalSubtitle">
+            Заполните поля для создания новой записи ДДС
+          </p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                onclick="resetForm()"></button>
+      </div>
+
+      <div class="modal-body p-4">
+        {# Глобальный блок ошибок API #}
+        <div id="form-errors" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+        <form id="dds-form" onsubmit="submitTransactionForm(event)" novalidate>
+          {% csrf_token %}
+
+          {#  Секция 1: Основные данные  #}
+          <p class="section-label mb-3">Основные данные</p>
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <label class="form-label">Дата операции <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="f-date" name="date" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Сумма (руб.) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text">₽</span>
+                <input type="number" class="form-control" id="f-amount" name="amount"
+                       placeholder="0.00" min="0.01" step="0.01" required>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Статус</label>
+              <select class="form-select" id="f-status" name="status">
+                {% for s in all_statuses %}
+                  <option value="{{ s.pk }}">{{ s.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Комментарий</label>
+              <input type="text" class="form-control" id="f-comment" name="comment"
+                     placeholder="Дополнительная информация...">
+            </div>
+          </div>
+
+          {#  Секция 2: Классификация  #}
+          <p class="section-label mb-3">Классификация</p>
+          <div class="row g-3 mb-2">
+            <div class="col-12">
+              <label class="form-label">Тип операции <span class="text-danger">*</span></label>
+              <div class="d-flex gap-2">
+                {% for t in all_types %}
+                  <button type="button"
+                          class="btn btn-outline-secondary flex-fill py-2 type-btn"
+                          data-type-id="{{ t.pk }}"
+                          data-type-name="{{ t.name }}"
+                          data-kind="{{ t.kind }}"
+                          onclick="selectType(this)">
+                    {% if t.kind == "income" %}
+                      <i class="bi bi-arrow-down-left me-2"></i>
+                    {% elif t.kind == "expense" %}
+                      <i class="bi bi-arrow-up-right me-2"></i>
+                    {% else %}
+                      <i class="bi bi-arrow-left-right me-2"></i>
+                    {% endif %}
+                    <span class="fw-semibold">{{ t.name }}</span>
+                  </button>
+                {% endfor %}
+              </div>
+              <input type="hidden" id="f-type" name="transaction_type" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Категория <span class="text-danger">*</span></label>
+              <select class="form-select" id="sel-category" name="category" disabled required>
+                <option value="">Сначала выберите тип</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Подкатегория <span class="text-danger">*</span></label>
+              <select class="form-select" id="sel-subcategory" name="subcategory" disabled required>
+                <option value="">Сначала выберите категорию</option>
+              </select>
+            </div>
+          </div>
+
+        </form>{# /dds-form #}
+      </div>{# /modal-body #}
+
+      <div class="modal-footer bg-light rounded-bottom-3 d-flex justify-content-between px-4 py-3">
+        <button type="button" class="btn btn-outline-secondary"
+                data-bs-dismiss="modal" onclick="resetForm()">Отмена</button>
+        <button type="submit" form="dds-form" class="btn btn-primary px-4" id="formSubmitBtn">
+          <i class="bi bi-plus-lg me-1"></i>Создать запись
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{#  MODAL 2 — СПРАВОЧНИКИ  #}
+<div class="modal fade" id="dirModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+       style="max-width:600px">
+    <div class="modal-content rounded-3">
+
+      <div class="modal-header px-4 py-3">
+        <div>
+          <h5 class="modal-title fw-bold mb-0">Справочники</h5>
+          <p class="text-muted small mb-0 mt-1">Управление значениями классификаторов</p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      {# Вкладки #}
+      <div class="px-4 border-bottom">
+        <ul class="nav nav-tabs border-0" id="dirTabs">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab"
+                    data-bs-target="#tab-statuses">
+              <i class="bi bi-check2-circle me-1"></i>Статусы
+              <span class="badge bg-light text-secondary border ms-2"
+                    style="font-size:.7rem" id="cnt-statuses">{{ status_count }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#tab-types">
+              <i class="bi bi-arrow-left-right me-1"></i>Типы
+              <span class="badge bg-light text-secondary border ms-2"
+                    style="font-size:.7rem" id="cnt-types">{{ type_count }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#tab-categories">
+              <i class="bi bi-folder me-1"></i>Категории
+              <span class="badge bg-light text-secondary border ms-2"
+                    style="font-size:.7rem" id="cnt-categories">{{ category_count }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#tab-subcategories">
+              <i class="bi bi-folder2-open me-1"></i>Подкатегории
+              <span class="badge bg-light text-secondary border ms-2"
+                    style="font-size:.7rem" id="cnt-subcategories">{{ subcategory_count }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="modal-body p-0" style="max-height:420px;overflow-y:auto">
+        <div class="tab-content">
+
+          {#  TAB: Статусы  #}
+          <div class="tab-pane fade show active" id="tab-statuses">
+            <div class="d-flex gap-2 p-3 border-bottom bg-light">
+              <input type="text" class="form-control form-control-sm"
+                     id="inp-status" placeholder="Название нового статуса...">
+              <button class="btn btn-sm btn-primary px-3"
+                      onclick="addRef('statuses','inp-status','cnt-statuses','list-statuses')">
+                <i class="bi bi-plus-lg me-1"></i>Добавить
+              </button>
+            </div>
+            <div id="list-statuses">
+              {% for s in all_statuses %}
+              <div class="ref-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-ref-id="{{ s.pk }}">
+                <span class="flex-fill" style="font-size:.9375rem">{{ s.name }}</span>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="editRef('statuses', {{ s.pk }}, '{{ s.name|escapejs }}', this)">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="deleteRef('statuses', {{ s.pk }}, '{{ s.name|escapejs }}', 'cnt-statuses', 'list-statuses')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              {% empty %}
+              <p class="text-muted small text-center py-3 mb-0">Статусов нет. Добавьте первый.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+          {#  TAB: Типы  #}
+          <div class="tab-pane fade" id="tab-types">
+            <div class="d-flex gap-2 p-3 border-bottom bg-light">
+              <input type="text" class="form-control form-control-sm"
+                     id="inp-type" placeholder="Название нового типа...">
+              <button class="btn btn-sm btn-primary px-3"
+                      onclick="addRef('types','inp-type','cnt-types','list-types')">
+                <i class="bi bi-plus-lg me-1"></i>Добавить
+              </button>
+            </div>
+            <div id="list-types">
+              {% for t in all_types %}
+              <div class="ref-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-ref-id="{{ t.pk }}">
+                <span class="flex-fill" style="font-size:.9375rem">{{ t.name }}</span>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="editRef('types', {{ t.pk }}, '{{ t.name|escapejs }}', this)">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="deleteRef('types', {{ t.pk }}, '{{ t.name|escapejs }}', 'cnt-types', 'list-types')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              {% empty %}
+              <p class="text-muted small text-center py-3 mb-0">Типов нет.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+          {#  TAB: Категории  #}
+          <div class="tab-pane fade" id="tab-categories">
+            <div class="p-3 border-bottom bg-light">
+              <div class="d-flex gap-2">
+                <select class="form-select form-select-sm" id="inp-cat-type"
+                        style="max-width:180px">
+                  <option value="">Тип...</option>
+                  {% for t in all_types %}
+                    <option value="{{ t.pk }}">{{ t.name }}</option>
+                  {% endfor %}
+                </select>
+                <input type="text" class="form-control form-control-sm"
+                       id="inp-category" placeholder="Название категории...">
+                <button class="btn btn-sm btn-primary px-3"
+                        onclick="addRefWithParent('categories','inp-category','inp-cat-type','transaction_type','cnt-categories','list-categories')">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div id="list-categories">
+              {% for c in all_categories %}
+              <div class="ref-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-ref-id="{{ c.pk }}">
+                <span class="flex-fill" style="font-size:.9375rem">{{ c.name }}</span>
+                <span class="badge bg-light text-secondary border"
+                      style="font-size:.7rem">{{ c.transaction_type.name }}</span>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="editRef('categories', {{ c.pk }}, '{{ c.name|escapejs }}', this)">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="deleteRef('categories', {{ c.pk }}, '{{ c.name|escapejs }}', 'cnt-categories', 'list-categories')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              {% empty %}
+              <p class="text-muted small text-center py-3 mb-0">Категорий нет.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+          {#  TAB: Подкатегории  #}
+          <div class="tab-pane fade" id="tab-subcategories">
+            <div class="p-3 border-bottom bg-light">
+              <div class="d-flex gap-2">
+                <select class="form-select form-select-sm" id="inp-sub-cat"
+                        style="max-width:200px">
+                  <option value="">Категория...</option>
+                  {% for c in all_categories %}
+                    <option value="{{ c.pk }}">{{ c.name }} ({{ c.transaction_type.name }})</option>
+                  {% endfor %}
+                </select>
+                <input type="text" class="form-control form-control-sm"
+                       id="inp-subcategory" placeholder="Название...">
+                <button class="btn btn-sm btn-primary px-3"
+                        onclick="addRefWithParent('subcategories','inp-subcategory','inp-sub-cat','category','cnt-subcategories','list-subcategories')">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div id="list-subcategories">
+              {% for s in all_subcategories %}
+              <div class="ref-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-ref-id="{{ s.pk }}">
+                <span class="flex-fill" style="font-size:.9375rem">{{ s.name }}</span>
+                <span class="badge bg-light text-secondary border"
+                      style="font-size:.7rem">{{ s.category.name }}</span>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="editRef('subcategories', {{ s.pk }}, '{{ s.name|escapejs }}', this)">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="deleteRef('subcategories', {{ s.pk }}, '{{ s.name|escapejs }}', 'cnt-subcategories', 'list-subcategories')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              {% empty %}
+              <p class="text-muted small text-center py-3 mb-0">Подкатегорий нет.</p>
+              {% endfor %}
+            </div>
+          </div>
+
+        </div>{# /tab-content #}
+      </div>{# /modal-body #}
+
+      <div class="modal-footer bg-light rounded-bottom-3 d-flex justify-content-between px-4 py-3">
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle me-1"></i>Изменения сохраняются автоматически
+        </p>
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Закрыть</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</div>
+{% endblock body %}
+
+{% block extra_js %}
+<script>
+
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+
+// Utility: JSON fetch with CSRF
+async function apiFetch(url, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(url, opts);
+}
+
+// Currency formatter (JS side, for dynamic content)
+function fmt(amount) {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency', currency: 'RUB', maximumFractionDigits: 0
+  }).format(amount);
+}
+
+// TYPE SELECTION — form modal type buttons
+
+let currentTypeId = null;
+
+function selectType(btn) {
+  // Reset all buttons to outline style
+  document.querySelectorAll('.type-btn').forEach(b => {
+    b.className = 'btn btn-outline-secondary flex-fill py-2 type-btn';
+  });
+
+  // Apply colour based on kind field — reliable, not tied to name string
+  const kind = btn.dataset.kind;
+  if (kind === 'income') {
+    btn.classList.add('selected-income');
+  } else if (kind === 'expense') {
+    btn.classList.add('selected-expense');
+  } else {
+    btn.classList.add('selected-other');
+  }
+  btn.classList.remove('btn-outline-secondary');
+
+  currentTypeId = btn.dataset.typeId;
+  document.getElementById('f-type').value = currentTypeId;
+  loadCategories(currentTypeId);
+}
+
+async function selectTypeById(typeId) {
+  const btn = document.querySelector(`.type-btn[data-type-id="${typeId}"]`);
+  if (btn) selectType(btn);
+}
+
+// CASCADE DROPDOWNS — uses real DRF API
+
+async function loadCategories(typeId) {
+  const catSel = document.getElementById('sel-category');
+  const subSel = document.getElementById('sel-subcategory');
+  catSel.innerHTML = '<option value="">Загрузка...</option>';
+  catSel.disabled = true;
+  subSel.innerHTML = '<option value="">Сначала выберите категорию</option>';
+  subSel.disabled = true;
+
+  const resp = await fetch(`/api/v1/types/${typeId}/categories/`);
+  const cats = await resp.json();
+  catSel.innerHTML = '<option value="">Выберите категорию...</option>';
+  cats.forEach(c => {
+    catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+  });
+  catSel.disabled = cats.length === 0;
+}
+
+async function loadSubcategories(categoryId) {
+  const subSel = document.getElementById('sel-subcategory');
+  subSel.innerHTML = '<option value="">Загрузка...</option>';
+  subSel.disabled = true;
+
+  const resp = await fetch(`/api/v1/categories/${categoryId}/subcategories/`);
+  const subs = await resp.json();
+  subSel.innerHTML = '<option value="">Выберите подкатегорию...</option>';
+  subs.forEach(s => {
+    subSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+  subSel.disabled = subs.length === 0;
+}
+
+document.getElementById('sel-category').addEventListener('change', function () {
+  if (this.value) loadSubcategories(this.value);
+});
+
+// TRANSACTION FORM — create / edit
+
+let editingId = null;
+
+function openCreate() {
+  editingId = null;
+  resetForm();
+  document.getElementById('formModalTitle').textContent = 'Новая запись';
+  document.getElementById('formModalSubtitle').textContent =
+    'Заполните поля для создания новой записи ДДС';
+  document.getElementById('formSubmitBtn').innerHTML =
+    '<i class="bi bi-plus-lg me-1"></i>Создать запись';
+  document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+}
+
+async function openEdit(pk) {
+  editingId = pk;
+  resetForm();
+
+  document.getElementById('formModalTitle').textContent = 'Редактировать запись';
+  document.getElementById('formModalSubtitle').textContent =
+    'Измените нужные поля и сохраните';
+  document.getElementById('formSubmitBtn').innerHTML =
+    '<i class="bi bi-floppy me-1"></i>Сохранить изменения';
+
+  // Fetch transaction data from API
+  const resp = await fetch(`/api/v1/transactions/${pk}/`);
+  if (!resp.ok) { alert('Не удалось загрузить запись.'); return; }
+  const t = await resp.json();
+
+  // Fill basic fields
+  document.getElementById('f-date').value = t.date;
+  document.getElementById('f-amount').value = t.amount;
+  document.getElementById('f-comment').value = t.comment || '';
+
+  // Status select
+  const statusSel = document.getElementById('f-status');
+  statusSel.value = t.status;
+
+  // Select type button (triggers category load)
+  await selectTypeById(String(t.transaction_type));
+
+  // Load categories for this type, then set saved category
+  await loadCategories(t.transaction_type);
+  document.getElementById('sel-category').value = t.category;
+
+  // Load subcategories for this category, then set saved subcategory
+  await loadSubcategories(t.category);
+  document.getElementById('sel-subcategory').value = t.subcategory;
+}
+
+async function submitTransactionForm(e) {
+  e.preventDefault();
+  clearFormErrors();
+
+  const payload = {
+    date:             document.getElementById('f-date').value,
+    amount:           document.getElementById('f-amount').value,
+    status:           document.getElementById('f-status').value,
+    transaction_type: document.getElementById('f-type').value,
+    category:         document.getElementById('sel-category').value,
+    subcategory:      document.getElementById('sel-subcategory').value,
+    comment:          document.getElementById('f-comment').value,
+  };
+
+  // Client-side guard: type must be selected
+  if (!payload.transaction_type) {
+    showFormError('Выберите тип операции (Поступление / Расход).');
+    return;
+  }
+
+  const url    = editingId ? `/api/v1/transactions/${editingId}/` : '/api/v1/transactions/';
+  const method = editingId ? 'PATCH' : 'POST';
+
+  const resp = await apiFetch(url, method, payload);
+
+  if (resp.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
+    window.location.reload();
+  } else {
+    const errors = await resp.json();
+    showFormErrors(errors);
+  }
+}
+
+function resetForm() {
+  document.getElementById('dds-form').reset();
+  currentTypeId = null;
+  document.getElementById('f-type').value = '';
+  document.querySelectorAll('.type-btn').forEach(b => {
+    b.className = 'btn btn-outline-secondary flex-fill py-2 type-btn';
+  });
+  document.getElementById('sel-category').innerHTML =
+    '<option value="">Сначала выберите тип</option>';
+  document.getElementById('sel-category').disabled = true;
+  document.getElementById('sel-subcategory').innerHTML =
+    '<option value="">Сначала выберите категорию</option>';
+  document.getElementById('sel-subcategory').disabled = true;
+  clearFormErrors();
+}
+
+function showFormError(msg) {
+  const el = document.getElementById('form-errors');
+  el.textContent = msg;
+  el.classList.remove('d-none');
+}
+
+function showFormErrors(errors) {
+  const lines = [];
+  if (typeof errors === 'object') {
+    for (const [field, msgs] of Object.entries(errors)) {
+      const label = field === 'non_field_errors' ? '' : `${field}: `;
+      const text  = Array.isArray(msgs) ? msgs.join(', ') : msgs;
+      lines.push(`${label}${text}`);
+    }
+  } else {
+    lines.push(String(errors));
+  }
+  showFormError(lines.join('\n'));
+}
+
+function clearFormErrors() {
+  const el = document.getElementById('form-errors');
+  el.textContent = '';
+  el.classList.add('d-none');
+}
+
+// DELETE TRANSACTION
+
+async function deleteTransaction(pk, dateLabel) {
+  if (!confirm(`Удалить запись от ${dateLabel}? Это действие необратимо.`)) return;
+  const resp = await apiFetch(`/api/v1/transactions/${pk}/`, 'DELETE');
+  if (resp.ok || resp.status === 204) {
+    window.location.reload();
+  } else {
+    alert('Ошибка при удалении записи.');
+  }
+}
+
+// REFERENCE CRUD — справочники modal
+
+async function addRef(entity, inputId, cntId, listId) {
+  const name = document.getElementById(inputId).value.trim();
+  if (!name) return;
+
+  const resp = await apiFetch(`/api/v1/${entity}/`, 'POST', { name });
+  if (!resp.ok) {
+    const err = await resp.json();
+    alert('Ошибка: ' + JSON.stringify(err));
+    return;
+  }
+  const item = await resp.json();
+  document.getElementById(inputId).value = '';
+
+  // Append row to list
+  const list = document.getElementById(listId);
+  list.querySelector('p.text-muted')?.remove();
+  const row = buildRefRow(entity, item.id, item.name, null, cntId, listId);
+  list.appendChild(row);
+
+  // Update badge count
+  incrementBadge(cntId);
+}
+
+async function addRefWithParent(entity, inputId, parentSelId, parentField, cntId, listId) {
+  const name     = document.getElementById(inputId).value.trim();
+  const parentId = document.getElementById(parentSelId).value;
+  if (!name)     { alert('Введите название.'); return; }
+  if (!parentId) { alert('Выберите родительский элемент.'); return; }
+
+  const body = { name, [parentField]: parentId };
+  const resp = await apiFetch(`/api/v1/${entity}/`, 'POST', body);
+  if (!resp.ok) {
+    const err = await resp.json();
+    alert('Ошибка: ' + JSON.stringify(err));
+    return;
+  }
+  const item       = await resp.json();
+  const parentName = document.getElementById(parentSelId)
+                             .selectedOptions[0].text.split(' (')[0];
+
+  document.getElementById(inputId).value = '';
+  const list = document.getElementById(listId);
+  list.querySelector('p.text-muted')?.remove();
+  const row = buildRefRow(entity, item.id, item.name, parentName, cntId, listId);
+  list.appendChild(row);
+  incrementBadge(cntId);
+}
+
+async function deleteRef(entity, id, name, cntId, listId) {
+  if (!confirm(`Удалить «${name}»?`)) return;
+  const resp = await apiFetch(`/api/v1/${entity}/${id}/`, 'DELETE');
+
+  if (resp.ok || resp.status === 204) {
+    document.querySelector(`#${listId} [data-ref-id="${id}"]`)?.remove();
+    decrementBadge(cntId);
+    if (!document.querySelector(`#${listId} [data-ref-id]`)) {
+      document.getElementById(listId).innerHTML =
+        '<p class="text-muted small text-center py-3 mb-0">Нет записей. Добавьте первую.</p>';
+    }
+  } else if (resp.status === 409) {
+    const err = await resp.json();
+    alert(err.detail || 'Нельзя удалить: запись используется.');
+  } else {
+    alert('Ошибка при удалении.');
+  }
+}
+
+function editRef(entity, id, currentName, btn) {
+  const row = btn.closest('[data-ref-id]');
+  const nameSpan = row.querySelector('span.flex-fill');
+  const badgeSpan = row.querySelector('.badge');
+
+  // Replace name span with input + save/cancel
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'form-control form-control-sm flex-fill';
+  input.value = currentName;
+  nameSpan.replaceWith(input);
+
+  // Replace buttons with save + cancel
+  const btnGroup = row.querySelector('.d-flex, button').closest('div') || row;
+  const oldButtons = row.querySelectorAll('button');
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-sm btn-primary';
+  saveBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+  saveBtn.onclick = () => saveRef(entity, id, input.value, row, badgeSpan?.textContent);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-sm btn-outline-secondary';
+  cancelBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+  cancelBtn.onclick = () => window.location.reload();
+
+  oldButtons.forEach(b => b.replaceWith(''));
+  row.appendChild(saveBtn);
+  row.appendChild(cancelBtn);
+  input.focus();
+}
+
+async function saveRef(entity, id, newName, row, badgeTxt) {
+  newName = newName.trim();
+  if (!newName) return;
+  const resp = await apiFetch(`/api/v1/${entity}/${id}/`, 'PATCH', { name: newName });
+  if (resp.ok) {
+    window.location.reload();
+  } else {
+    const err = await resp.json();
+    alert('Ошибка: ' + JSON.stringify(err));
+  }
+}
+
+// Badge helpers
+function buildRefRow(entity, id, name, parentLabel, cntId, listId) {
+  const div = document.createElement('div');
+  div.className = 'ref-item d-flex align-items-center gap-2 px-3 py-2';
+  div.dataset.refId = id;
+  div.innerHTML = `
+    <span class="flex-fill" style="font-size:.9375rem">${name}</span>
+    ${parentLabel ? `<span class="badge bg-light text-secondary border" style="font-size:.7rem">${parentLabel}</span>` : ''}
+    <button class="btn btn-sm btn-outline-secondary"
+            onclick="editRef('${entity}', ${id}, '${name.replace(/'/g,"\\'")}', this)">
+      <i class="bi bi-pencil"></i>
+    </button>
+    <button class="btn btn-sm btn-outline-danger"
+            onclick="deleteRef('${entity}', ${id}, '${name.replace(/'/g,"\\'")}', '${cntId}', '${listId}')">
+      <i class="bi bi-trash"></i>
+    </button>`;
+  return div;
+}
+
+function incrementBadge(cntId) {
+  const el = document.getElementById(cntId);
+  if (el) el.textContent = String(parseInt(el.textContent || '0') + 1);
+}
+function decrementBadge(cntId) {
+  const el = document.getElementById(cntId);
+  if (el) el.textContent = String(Math.max(0, parseInt(el.textContent || '0') - 1));
+}
+
+// INIT — reset form when modal is closed via backdrop/button
+document.getElementById('formModal').addEventListener('hidden.bs.modal', resetForm);
+</script>
+{% endblock extra_js %}

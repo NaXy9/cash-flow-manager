@@ -1,0 +1,13 @@
+services:
+  web:
+    build: .
+    restart: always
+    ports:
+      - "127.0.0.1:5000:8000"
+    volumes:
+      - sqlite_data:/app/db
+    env_file:
+      - .env.prod
+
+volumes:
+  sqlite_data:

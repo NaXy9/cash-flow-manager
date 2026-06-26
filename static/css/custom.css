@@ -1,0 +1,110 @@
+
+/* --- Typography ---------------------------------------------------- */
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8f9fa;
+}
+
+/* --- Accent colour: Indigo-600 (#4f46e5) --------------------------- */
+.btn-primary                       { background-color: #4f46e5; border-color: #4f46e5; }
+.btn-primary:hover,
+.btn-primary:focus                 { background-color: #4338ca; border-color: #4338ca; }
+.btn-primary:focus-visible         { box-shadow: 0 0 0 3px rgba(79, 70, 229, .35); }
+.btn-outline-primary               { color: #4f46e5; border-color: #4f46e5; }
+.btn-outline-primary:hover         { background-color: #4f46e5; border-color: #4f46e5; color: #fff; }
+
+/* Active pagination page */
+.page-link.active-page,
+.page-item.active .page-link       { background-color: #4f46e5 !important; border-color: #4f46e5 !important; color: #fff !important; }
+
+/* Focus ring */
+.form-control:focus,
+.form-select:focus                 { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .15); }
+
+/* --- Nav tabs (справочники modal) ---------------------------------- */
+.nav-tabs .nav-link {
+  color: #6b7280;
+  font-weight: 500;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: .75rem 1rem;
+  transition: color .15s, border-color .15s;
+}
+.nav-tabs .nav-link:hover          { color: #4f46e5; }
+.nav-tabs .nav-link.active         { color: #4f46e5 !important; border-bottom: 2px solid #4f46e5; background: transparent; }
+
+/* --- Stat cards ---------------------------------------------------- */
+.stat-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  background: #fff;
+}
+.stat-card .stat-value             { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+.stat-card .stat-label             { font-size: .8125rem; color: #6b7280; margin-top: .2rem; }
+.stat-card.income  .stat-value     { color: #065f46; }
+.stat-card.expense .stat-value     { color: #991b1b; }
+.stat-card.balance .stat-value     { color: #1d4ed8; }
+
+/* --- Filter bar ---------------------------------------------------- */
+.filter-bar {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  background: #fff;
+}
+
+/* --- Card (transaction table wrapper) ------------------------------ */
+.card {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+/* --- Table --------------------------------------------------------- */
+.table thead th {
+  font-size: .8125rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+.table tbody td {
+  vertical-align: middle;
+  padding-top: .75rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.table tbody tr:last-child td      { border-bottom: none; }
+.table-hover tbody tr:hover        { background-color: #fafaff; }
+
+/* --- Reference list items (справочники modal) ---------------------- */
+.ref-item {
+  border-bottom: 1px solid #f3f4f6;
+  transition: background .1s;
+}
+.ref-item:last-child               { border-bottom: none; }
+.ref-item:hover                    { background: #f9fafb; }
+
+/* --- Type toggle buttons in form modal ----------------------------- */
+.type-btn                          { transition: all .15s ease; }
+.type-btn.selected-income          { background-color: #065f46; border-color: #065f46; color: #fff; }
+.type-btn.selected-income:hover    { background-color: #064e3b; border-color: #064e3b; color: #fff; }
+.type-btn.selected-expense         { background-color: #991b1b; border-color: #991b1b; color: #fff; }
+.type-btn.selected-expense:hover   { background-color: #7f1d1d; border-color: #7f1d1d; color: #fff; }
+.type-btn.selected-other           { background-color: #4f46e5; border-color: #4f46e5; color: #fff; }
+
+/* --- Misc ---------------------------------------------------------- */
+.text-truncate-cell                { max-width: 200px; }
+.modal-header                      { border-bottom: 1px solid #e5e7eb; }
+.modal-footer                      { border-top: 1px solid #e5e7eb; }
+.section-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
