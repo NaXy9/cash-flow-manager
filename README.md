@@ -61,7 +61,7 @@ cp .env.example .env
 
 ```bash
 python manage.py migrate
-python manage.py seed_data   # загружает начальные справочники из ТЗ
+python manage.py seed_data   # загружает начальные данные
 ```
 
 **4. Запуск сервера**
